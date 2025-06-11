@@ -45,7 +45,3 @@ python app.py
 ## Requirements
 
 See `requirements.txt` for the complete list of dependencies.
-
-## License
-
-MIT License 
