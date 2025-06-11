@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InsightBot - AI SQL Assistant</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; color: #333; }
+        h1 { color: #555; }
+        #query-container { display: flex; gap: 10px; }
+        #query-input { flex-grow: 1; padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; }
+        #submit-btn { padding: 12px 20px; font-size: 16px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 6px; transition: background-color 0.2s; }
+        #submit-btn:disabled { background-color: #aaa; cursor: not-allowed; }
+        #submit-btn:hover:not(:disabled) { background-color: #0056b3; }
+        #results-area { margin-top: 25px; border: 1px solid #e0e0e0; padding: 15px; border-radius: 6px; display: none; }
+        .result-block { margin-bottom: 20px; }
+        .result-block h3 { margin-top: 0; color: #333; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        pre { background-color: #f6f8fa; padding: 15px; border-radius: 5px; white-space: pre-wrap; word-wrap: break-word; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; line-height: 1.45; }
+        .error { color: #d9534f; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #f7f7f7; }
+        tr:nth-child(even) { background-color: #fbfbfb; }
+    </style>
+</head>
+<body>
+    <h1>InsightBot 🤖</h1>
+    <p>Ask a question about sales, products, or customers in plain English.</p>
+    
+    <div id="query-container">
+        <input type="text" id="query-input" placeholder="e.g., What is the total sales amount per category?">
+        <button id="submit-btn">Ask</button>
+    </div>
+
+    <div id="results-area">
+        <div class="result-block">
+            <h3>Generated SQL Query</h3>
+            <pre id="sql-query">...</pre>
+        </div>
+        <div class="result-block">
+            <h3>Results</h3>
+            <div id="results-table"></div>
+        </div>
+    </div>
+
+    <script>
+        const queryInput = document.getElementById('query-input');
+        const submitBtn = document.getElementById('submit-btn');
+        const resultsArea = document.getElementById('results-area');
+        const sqlQueryPre = document.getElementById('sql-query');
+        const resultsTableDiv = document.getElementById('results-table');
+
+        const handleQuery = async () => {
+            const question = queryInput.value.trim();
+            if (!question) {
+                alert('Please enter a question.');
+                return;
+            }
+
+            // --- UI state update: Loading ---
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Thinking...';
+            resultsArea.style.display = 'block';
+            sqlQueryPre.textContent = 'Generating query...';
+            resultsTableDiv.innerHTML = '<p>Fetching data...</p>';
+
+            try {
+                const response = await fetch('/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question: question })
+                });
+
+                const data = await response.json();
+                
+                // --- Display SQL query ---
+                sqlQueryPre.textContent = data.sql_query || "An error occurred.";
+
+                // --- Display results or error ---
+                resultsTableDiv.innerHTML = ''; // Clear previous results
+                if (data.results && data.results.error) {
+                    const errorP = document.createElement('p');
+                    errorP.className = 'error';
+                    errorP.textContent = data.results.error;
+                    resultsTableDiv.appendChild(errorP);
+                } else if (data.results && Array.isArray(data.results) && data.results.length > 0) {
+                    resultsTableDiv.appendChild(createTable(data.results));
+                } else {
+                    resultsTableDiv.innerHTML = '<p>Query ran successfully, but returned no results.</p>';
+                }
+
+            } catch (error) {
+                console.error("Fetch Error:", error);
+                resultsTableDiv.innerHTML = `<p class="error">A network error occurred. Please check the console and ensure the server is running.</p>`;
+            } finally {
+                // --- UI state update: Done ---
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Ask';
+            }
+        };
+        
+        const createTable = (data) => {
+            const table = document.createElement('table');
+            const thead = document.createElement('thead');
+            const tbody = document.createElement('tbody');
+            const headers = Object.keys(data[0]);
+            
+            const headerRow = document.createElement('tr');
+            headers.forEach(header => {
+                const th = document.createElement('th');
+                th.textContent = header;
+                headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+
+            data.forEach(rowData => {
+                const row = document.createElement('tr');
+                headers.forEach(header => {
+                    const td = document.createElement('td');
+                    td.textContent = rowData[header];
+                    row.appendChild(td);
+                });
+                tbody.appendChild(row);
+            });
+
+            table.appendChild(thead);
+            table.appendChild(tbody);
+            return table;
+        };
+
+        submitBtn.addEventListener('click', handleQuery);
+        queryInput.addEventListener('keyup', (event) => {
+            if (event.key === 'Enter') {
+                handleQuery();
+            }
+        });
+    </script>
+</body>
+</html>
+
