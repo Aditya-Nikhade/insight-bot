@@ -1,5 +1,8 @@
 -- schema.sql
+CREATE DATABASE IF NOT EXISTS insight_bot;
 
+-- Select the database to use for the following commands
+USE insight_bot;
 -- Drop tables if they exist to start with a clean slate.
 -- This is useful for re-running the script for testing.
 DROP TABLE IF EXISTS sales;
