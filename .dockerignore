@@ -1,0 +1,23 @@
+# .dockerignore
+
+# Ignore the .env file to prevent baking configuration into the image
+.env
+
+# Ignore Git directory
+.git
+.gitignore
+
+# Ignore Python virtual environment
+.venv
+insight-env/
+venv/
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore Docker files themselves
+Dockerfile
+.dockerignore

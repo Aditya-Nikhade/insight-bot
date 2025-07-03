@@ -1,106 +1,223 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-bs-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>InsightBot - AI SQL Assistant</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; color: #333; }
-        h1 { color: #555; }
-        #query-container { display: flex; gap: 10px; }
-        #query-input { flex-grow: 1; padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; }
-        #submit-btn { padding: 12px 20px; font-size: 16px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 6px; transition: background-color 0.2s; }
-        #submit-btn:disabled { background-color: #aaa; cursor: not-allowed; }
-        #submit-btn:hover:not(:disabled) { background-color: #0056b3; }
-        #results-area { margin-top: 25px; border: 1px solid #e0e0e0; padding: 15px; border-radius: 6px; display: none; }
-        .result-block { margin-bottom: 20px; }
-        .result-block h3 { margin-top: 0; color: #333; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-        pre { background-color: #f6f8fa; padding: 15px; border-radius: 5px; white-space: pre-wrap; word-wrap: break-word; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; line-height: 1.45; }
-        .error { color: #d9534f; font-weight: bold; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-        th { background-color: #f7f7f7; }
-        tr:nth-child(even) { background-color: #fbfbfb; }
+        body { background-color: #f8f9fa; }
+        .main-container { max-width: 1200px; margin-top: 2rem; }
+        .chat-window { height: 70vh; overflow-y: auto; border: 1px solid #dee2e6; background-color: #fff; border-radius: .375rem; padding: 1rem; }
+        .sidebar .card-body { padding: 1rem; }
+        .sidebar .list-group-item { cursor: pointer; }
+        .sidebar .list-group-item:hover { background-color: #e9ecef; }
+        .message { margin-bottom: 1rem; }
+        .user-message { text-align: right; }
+        .user-message .message-content { background-color: #0d6efd; color: white; display: inline-block; padding: .5rem 1rem; border-radius: 1rem .25rem 1rem 1rem; }
+        .bot-message .message-content { background-color: #e9ecef; display: inline-block; padding: .5rem 1rem; border-radius: .25rem 1rem 1rem 1rem; text-align: left; }
+        .bot-message pre { font-size: 0.8em; }
+        .bot-message table { font-size: 0.9em; }
     </style>
 </head>
 <body>
-    <h1>InsightBot 🤖</h1>
-    <p>Ask a question about sales, products, or customers in plain English.</p>
-    
-    <div id="query-container">
-        <input type="text" id="query-input" placeholder="e.g., What is the total sales amount per category?">
-        <button id="submit-btn">Ask</button>
+    <div class="container main-container">
+        <div class="text-center mb-4">
+            <h1>InsightBot 🤖</h1>
+            <p class="lead">Ask a question about sales, products, or customers in plain English.</p>
+        </div>
+
+        <div class="row">
+            <!-- Sidebar for History and Examples -->
+            <div class="col-md-4 sidebar">
+                <div class="card mb-3">
+                    <div class="card-header">Example Questions</div>
+                    <div id="example-questions" class="card-body">
+                        <!-- Examples will be injected by JS -->
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">History</div>
+                    <div id="query-history" class="card-body">
+                        <!-- History will be injected by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Chat Area -->
+            <div class="col-md-8">
+                <div id="chat-window" class="chat-window shadow-sm">
+                    <!-- Chat messages will appear here -->
+                </div>
+                <div class="mt-3">
+                    <div class="input-group">
+                        <input type="text" id="query-input" class="form-control" placeholder="e.g., What is the total sales amount per category?">
+                        <button id="submit-btn" class="btn btn-primary">Ask</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <div id="results-area">
-        <div class="result-block">
-            <h3>Generated SQL Query</h3>
-            <pre id="sql-query">...</pre>
-        </div>
-        <div class="result-block">
-            <h3>Results</h3>
-            <div id="results-table"></div>
-        </div>
-    </div>
+    <!-- Chart.js for visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Bootstrap JS (optional, but good to have) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
         const queryInput = document.getElementById('query-input');
         const submitBtn = document.getElementById('submit-btn');
-        const resultsArea = document.getElementById('results-area');
-        const sqlQueryPre = document.getElementById('sql-query');
-        const resultsTableDiv = document.getElementById('results-table');
+        const chatWindow = document.getElementById('chat-window');
+        const exampleQuestionsDiv = document.getElementById('example-questions');
+        const queryHistoryDiv = document.getElementById('query-history');
 
-        const handleQuery = async () => {
-            const question = queryInput.value.trim();
-            if (!question) {
+        let currentConversationId = null;
+
+        const EXAMPLE_QUESTIONS = [
+            "Show me the top 5 products by sales",
+            "What is the total sales amount per category?",
+            "List customers who signed up in the last 90 days",
+            "Who are the top 3 customers by total spending?",
+        ];
+        const HISTORY_KEY = 'insightBotHistory';
+
+        const handleQuery = async (question) => {
+            if (!question || question.trim() === '') {
                 alert('Please enter a question.');
                 return;
             }
 
-            // --- UI state update: Loading ---
+            appendUserMessage(question);
+            const botMessageContainer = appendBotMessage();
+            saveToHistory(question);
+            renderHistory();
+
             submitBtn.disabled = true;
-            submitBtn.textContent = 'Thinking...';
-            resultsArea.style.display = 'block';
-            sqlQueryPre.textContent = 'Generating query...';
-            resultsTableDiv.innerHTML = '<p>Fetching data...</p>';
+            queryInput.value = '';
 
             try {
                 const response = await fetch('/query', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ question: question })
+                    body: JSON.stringify({ 
+                        question: question,
+                        conversation_id: currentConversationId 
+                    })
                 });
 
                 const data = await response.json();
                 
-                // --- Display SQL query ---
-                sqlQueryPre.textContent = data.sql_query || "An error occurred.";
-
-                // --- Display results or error ---
-                resultsTableDiv.innerHTML = ''; // Clear previous results
-                if (data.results && data.results.error) {
-                    const errorP = document.createElement('p');
-                    errorP.className = 'error';
-                    errorP.textContent = data.results.error;
-                    resultsTableDiv.appendChild(errorP);
-                } else if (data.results && Array.isArray(data.results) && data.results.length > 0) {
-                    resultsTableDiv.appendChild(createTable(data.results));
-                } else {
-                    resultsTableDiv.innerHTML = '<p>Query ran successfully, but returned no results.</p>';
+                if (data.conversation_id) {
+                    currentConversationId = data.conversation_id;
                 }
+
+                renderBotResponse(botMessageContainer, data);
 
             } catch (error) {
                 console.error("Fetch Error:", error);
-                resultsTableDiv.innerHTML = `<p class="error">A network error occurred. Please check the console and ensure the server is running.</p>`;
+                botMessageContainer.innerHTML = `<p class="text-danger">A network error occurred. Please check the console and ensure the server is running.</p>`;
             } finally {
-                // --- UI state update: Done ---
                 submitBtn.disabled = false;
-                submitBtn.textContent = 'Ask';
+                chatWindow.scrollTop = chatWindow.scrollHeight;
             }
         };
         
+        const appendUserMessage = (text) => {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message user-message';
+            messageDiv.innerHTML = `<div class="message-content">${text}</div>`;
+            chatWindow.appendChild(messageDiv);
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        };
+
+        const appendBotMessage = () => {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message bot-message';
+            const messageContent = document.createElement('div');
+            messageContent.className = 'message-content';
+            messageContent.innerHTML = `
+                <div class="d-flex align-items-center">
+                    <strong>Thinking...</strong>
+                    <div class="spinner-border spinner-border-sm ms-2" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>`;
+            messageDiv.appendChild(messageContent);
+            chatWindow.appendChild(messageDiv);
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+            return messageContent;
+        };
+
+        const renderBotResponse = (container, data) => {
+            container.innerHTML = ''; 
+
+            if (data.notice) {
+                const noticeDiv = document.createElement('div');
+                noticeDiv.className = 'alert alert-info py-2 mb-3';
+                noticeDiv.textContent = `💡 ${data.notice}`;
+                container.appendChild(noticeDiv);
+            }
+
+            const sqlHeader = document.createElement('h6');
+            sqlHeader.textContent = 'Generated SQL Query';
+            const sqlPre = document.createElement('pre');
+            sqlPre.textContent = data.sql_query || "N/A";
+            container.appendChild(sqlHeader);
+            container.appendChild(sqlPre);
+
+            const resultsHeader = document.createElement('h6');
+            resultsHeader.className = 'mt-3';
+            resultsHeader.textContent = 'Results';
+            container.appendChild(resultsHeader);
+            
+            if (data.results && data.results.error) {
+                const errorP = document.createElement('p');
+                errorP.className = 'text-danger fw-bold';
+                errorP.textContent = data.results.error;
+                container.appendChild(errorP);
+            } else if (data.results && Array.isArray(data.results) && data.results.length > 0) {
+                if (data.chart_suggestion) {
+                    renderChart(container, data.chart_suggestion, data.results);
+                }
+                container.appendChild(createTable(data.results));
+            } else {
+                container.innerHTML += '<p>Query ran successfully, but returned no results.</p>';
+            }
+        };
+        
+        const renderChart = (container, suggestion, data) => {
+            const chartContainer = document.createElement('div');
+            chartContainer.className = 'mb-3';
+            const canvas = document.createElement('canvas');
+            chartContainer.appendChild(canvas);
+            container.appendChild(chartContainer);
+
+            const labels = data.map(row => row[suggestion.labels_column]);
+            const values = data.map(row => row[suggestion.data_column]);
+
+            new Chart(canvas, {
+                type: suggestion.type,
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: suggestion.data_column.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+                        data: values,
+                        backgroundColor: 'rgba(13, 110, 253, 0.5)',
+                        borderColor: 'rgba(13, 110, 253, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: { y: { beginAtZero: true } },
+                    responsive: true,
+                }
+            });
+        };
+
         const createTable = (data) => {
             const table = document.createElement('table');
+            table.className = 'table table-striped table-bordered';
             const thead = document.createElement('thead');
             const tbody = document.createElement('tbody');
             const headers = Object.keys(data[0]);
@@ -128,13 +245,50 @@
             return table;
         };
 
-        submitBtn.addEventListener('click', handleQuery);
+        const renderSidebarItems = (container, items, title) => {
+            container.innerHTML = '';
+            if (items.length === 0 && title === 'History') {
+                container.innerHTML = '<small class="text-muted">Your recent queries will appear here.</small>';
+                return;
+            }
+            const list = document.createElement('ul');
+            list.className = 'list-group list-group-flush';
+            items.forEach(item => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item';
+                li.textContent = item;
+                li.onclick = () => {
+                    queryInput.value = item;
+                    handleQuery(item);
+                };
+                list.appendChild(li);
+            });
+            container.appendChild(list);
+        };
+        
+        const saveToHistory = (question) => {
+            let history = JSON.parse(localStorage.getItem(HISTORY_KEY)) || [];
+            history = [question, ...history.filter(q => q !== question)];
+            history = history.slice(0, 5);
+            localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+        };
+
+        const renderHistory = () => {
+            const history = JSON.parse(localStorage.getItem(HISTORY_KEY)) || [];
+            renderSidebarItems(queryHistoryDiv, history, 'History');
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderSidebarItems(exampleQuestionsDiv, EXAMPLE_QUESTIONS, 'Examples');
+            renderHistory();
+        });
+
+        submitBtn.addEventListener('click', () => handleQuery(queryInput.value));
         queryInput.addEventListener('keyup', (event) => {
             if (event.key === 'Enter') {
-                handleQuery();
+                handleQuery(queryInput.value);
             }
         });
     </script>
 </body>
 </html>
-
