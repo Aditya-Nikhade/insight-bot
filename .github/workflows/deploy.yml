@@ -49,15 +49,16 @@ jobs:
             docker build -t insight-bot:latest .
 
             echo ">>> Stopping and removing old container..."
-            docker stop insight-bot-container || true
-            docker rm insight-bot-container || true
+            docker stop insightbot-container || true
+            docker rm insightbot-container || true
 
             echo ">>> Starting new container..."
-            docker run -d -p 5000:5000 \
-              --name insight-bot-container \
+            docker run -d -p 127.0.0.1:8000:5000 \
+              --name insightbot-container \
+              --restart always \
               -e "DATABASE_URL=${{ secrets.DATABASE_URL }}" \
               -e "REDIS_HOST=${{ secrets.REDIS_HOST }}" \
-              -e "REDIS_PORT=6379" \
+              -e "REDIS_PORT=${{ secrets.REDIS_PORT }}" \
               -e "AZURE_AI_ENDPOINT=https://models.github.ai/inference" \
               -e "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}" \
               insight-bot:latest
