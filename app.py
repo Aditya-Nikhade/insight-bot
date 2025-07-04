@@ -35,7 +35,7 @@ except (redis.ConnectionError, redis.TimeoutError) as e:
 # Configure Azure AI Client
 client = ChatCompletionsClient(
     endpoint=os.getenv("AZURE_AI_ENDPOINT"),
-    credential=AzureKeyCredential(os.getenv("GITHUB_TOKEN")),
+    credential=AzureKeyCredential(os.getenv("AI_TOKEN")),
 )
 MODEL = "openai/gpt-4.1"
 

@@ -60,7 +60,7 @@ jobs:
               -e "REDIS_HOST=${{ secrets.REDIS_HOST }}" \
               -e "REDIS_PORT=${{ secrets.REDIS_PORT }}" \
               -e "AZURE_AI_ENDPOINT=https://models.github.ai/inference" \
-              -e "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}" \
+              -e "AI_TOKEN=${{ secrets.AI_TOKEN }}" \
               insight-bot:latest
 
             echo ">>> Pruning old Docker images..."
