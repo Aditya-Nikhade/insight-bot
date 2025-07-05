@@ -1,0 +1,18 @@
+services:
+  backend:
+    build: .
+    container_name: insightbot_backend
+    restart: always
+    # This line tells Docker Compose to read the .env file in this directory
+    # and inject its variables into the 'backend' container.
+    env_file:
+      - .env
+    # This connects the container to our shared network.
+    networks:
+      - master_network
+
+# This section tells Docker Compose to use the 'master_network'
+# that we already created manually.
+networks:
+  master_network:
+    external: true
