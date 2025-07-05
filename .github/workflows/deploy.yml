@@ -47,10 +47,10 @@ jobs:
             AI_TOKEN=${{ secrets.AI_TOKEN }}
             EOF
 
-            echo ">>> Rebuilding and restarting services with docker-compose..."
+            echo ">>> Rebuilding and restarting services with docker compose..."
             # This single command stops the old container, builds the new image,
             # and starts the new container with the correct name, network, and environment.
-            docker-compose up --build -d
+            docker compose up --build -d
 
             echo ">>> Pruning old Docker images..."
             docker image prune -af
