@@ -4,6 +4,9 @@ from datetime import datetime, timedelta
 from faker import Faker
 from sqlalchemy import create_engine, text
 from decimal import Decimal
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # --- CONFIG ---
 CUSTOMER_COUNT = 1000
