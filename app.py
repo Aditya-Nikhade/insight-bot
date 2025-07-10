@@ -59,7 +59,7 @@ Table: sales, Columns: id (INT), customer_id (INT), product_id (INT), sale_date 
 # --- ROBUST CLASSIFICATION RULES using REGEX ---
 CLASSIFICATION_RULES = [
     (re.compile(r"^\b(hi|hello|hey|howdy|good morning)\b.*", re.IGNORECASE), "greeting", "Hello! I'm InsightBot. Please ask a question about our sales data."),
-    (re.compile(r"^\b(delete|drop|update|insert|truncate|alter|ddl|dml)\b", re.IGNORECASE), "invalid_operation", "I can only perform read-only (SELECT) queries."),
+    (re.compile(r"^\b(delete|drop|update|insert|truncate|alter|ddl|dml)\b", re.IGNORECASE), "invalid_operation", "Nice try! 🚨 But I can only perform read-only (SELECT) queries. Better luck next time 😉"),
     (re.compile(r".*\b(joke|weather|cook|time|fun fact|beyonce)\b.*", re.IGNORECASE), "off_topic", "I can only answer questions related to our sales, products, or customers."),
     (re.compile(r"^\s*$", re.IGNORECASE), "clarification", "Your query is empty. Please ask a question."),
     (re.compile(r"^\b(show me|what about|tell me something|list|can you)\b\s*$", re.IGNORECASE), "clarification", "That's a bit vague. Can you be more specific? e.g., 'List the top 5 products by sales'.")

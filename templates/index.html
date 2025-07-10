@@ -4,94 +4,105 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>InsightBot - AI SQL Assistant</title>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Custom Styles -->
     <style>
-        body { background-color: #f8f9fa; }
+        body { 
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f4f7f9;
+            background-image: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
+        }
         .main-container { max-width: 1200px; margin-top: 2rem; }
         .chat-window { height: 70vh; overflow-y: auto; border: 1px solid #dee2e6; background-color: #fff; border-radius: .375rem; padding: 1rem; }
         .sidebar .card-body { padding: 1rem; }
-        .sidebar .list-group-item { cursor: pointer; }
+        .sidebar .list-group-item { cursor: pointer; border: none; padding: .75rem 1rem; }
         .sidebar .list-group-item:hover { background-color: #e9ecef; }
-        .message { margin-bottom: 1rem; }
-        .user-message { text-align: right; }
-        .user-message .message-content { background-color: #0d6efd; color: white; display: inline-block; padding: .5rem 1rem; border-radius: 1rem .25rem 1rem 1rem; }
-        .bot-message .message-content { background-color: #e9ecef; display: inline-block; padding: .5rem 1rem; border-radius: .25rem 1rem 1rem 1rem; text-align: left; }
-        .bot-message pre { font-size: 0.8em; }
-        .bot-message table { font-size: 0.9em; }
+        .message { margin-bottom: 1rem; display: flex; max-width: 85%; }
+        .user-message { justify-content: flex-end; margin-left: auto; }
+        .bot-message { justify-content: flex-start; }
+        .message .message-content { padding: .75rem 1.25rem; border-radius: 1.25rem; word-wrap: break-word; }
+        .user-message .message-content { background-color: #0d6efd; color: white; border-bottom-right-radius: .25rem; }
+        .bot-message .message-content { background-color: #e9ecef; color: #212529; border-bottom-left-radius: .25rem; }
+        .bot-message pre { font-size: 0.85em; margin-top: 0.5rem; }
+        .bot-message table { font-size: 0.9em; margin-top: 0.5rem; }
+        .input-group { box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
     </style>
 </head>
 <body>
     <div class="container main-container">
         <div class="text-center mb-4">
-            <h1>InsightBot 🤖</h1>
-            <p class="lead">Ask a question about sales, products, or customers in plain English.</p>
+            <h1 class="fw-bold">InsightBot 🤖</h1>
+            <p class="lead text-muted">Ask a question about sales, products, or customers in plain English.</p>
         </div>
 
         <div class="row">
-            <!-- Sidebar for History and Examples -->
+            <!-- Sidebar -->
             <div class="col-md-4 sidebar">
-                <div class="card mb-3">
-                    <div class="card-header">Example Questions</div>
-                    <div id="example-questions" class="card-body">
-                        <!-- Examples will be injected by JS -->
-                    </div>
+                <div class="card mb-3 shadow-sm">
+                    <div class="card-header bg-white">Example Questions</div>
+                    <div id="example-questions" class="card-body"></div>
                 </div>
-                <div class="card">
-                    <div class="card-header">History</div>
-                    <div id="query-history" class="card-body">
-                        <!-- History will be injected by JS -->
-                    </div>
+                <div class="card shadow-sm">
+                    <div class="card-header bg-white">History</div>
+                    <div id="query-history" class="card-body"></div>
                 </div>
             </div>
 
             <!-- Main Chat Area -->
             <div class="col-md-8">
                 <div id="chat-window" class="chat-window shadow-sm">
-                    <!-- Chat messages will appear here -->
+                    <!-- Initial Welcome Message will appear here -->
                 </div>
                 <div class="mt-3">
                     <div class="input-group">
                         <input type="text" id="query-input" class="form-control" placeholder="e.g., What is the total sales amount per category?">
                         <button id="submit-btn" class="btn btn-primary">Ask</button>
+                        <!-- NEW: Clear Chat Button -->
+                        <button id="clear-btn" class="btn btn-outline-secondary">Clear</button>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Chart.js for visualization -->
+    <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Bootstrap JS (optional, but good to have) -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
+        // --- Element selectors ---
         const queryInput = document.getElementById('query-input');
         const submitBtn = document.getElementById('submit-btn');
+        const clearBtn = document.getElementById('clear-btn');
         const chatWindow = document.getElementById('chat-window');
         const exampleQuestionsDiv = document.getElementById('example-questions');
         const queryHistoryDiv = document.getElementById('query-history');
 
+        // --- State and Constants ---
         let currentConversationId = null;
-
         const EXAMPLE_QUESTIONS = [
             "Show me the top 5 products by sales",
             "What is the total sales amount per category?",
+            "List customers who signed up in the last 90 days",
             "Who are the top 3 customers by total spending?",
         ];
         const HISTORY_KEY = 'insightBotHistory';
 
+        // --- Core Functions ---
         const handleQuery = async (question) => {
-            if (!question || question.trim() === '') {
-                alert('Please enter a question.');
-                return;
-            }
-
+            if (!question || question.trim() === '') return;
             appendUserMessage(question);
             const botMessageContainer = appendBotMessage();
             saveToHistory(question);
             renderHistory();
-
             submitBtn.disabled = true;
             queryInput.value = '';
 
@@ -99,33 +110,31 @@
                 const response = await fetch('/query', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        question: question,
-                        conversation_id: currentConversationId 
-                    })
+                    body: JSON.stringify({ question, conversation_id: currentConversationId })
                 });
-
                 const data = await response.json();
-                
-                if (data.conversation_id) {
-                    currentConversationId = data.conversation_id;
-                }
-
+                if (data.conversation_id) currentConversationId = data.conversation_id;
                 renderBotResponse(botMessageContainer, data);
-
             } catch (error) {
                 console.error("Fetch Error:", error);
-                botMessageContainer.innerHTML = `<p class="text-danger">A network error occurred. Please check the console and ensure the server is running.</p>`;
+                botMessageContainer.innerHTML = `<p class="text-danger">A network error occurred. Please check the console.</p>`;
             } finally {
                 submitBtn.disabled = false;
                 chatWindow.scrollTop = chatWindow.scrollHeight;
             }
         };
-        
+
+        const clearChat = () => {
+            chatWindow.innerHTML = '';
+            currentConversationId = null;
+            appendInitialWelcomeMessage();
+        };
+
+        // --- Message Rendering ---
         const appendUserMessage = (text) => {
             const messageDiv = document.createElement('div');
             messageDiv.className = 'message user-message';
-            messageDiv.innerHTML = `<div class="message-content">${text}</div>`;
+            messageDiv.innerHTML = `<div class="message-content shadow-sm">${text}</div>`;
             chatWindow.appendChild(messageDiv);
             chatWindow.scrollTop = chatWindow.scrollHeight;
         };
@@ -134,13 +143,11 @@
             const messageDiv = document.createElement('div');
             messageDiv.className = 'message bot-message';
             const messageContent = document.createElement('div');
-            messageContent.className = 'message-content';
+            messageContent.className = 'message-content shadow-sm';
             messageContent.innerHTML = `
                 <div class="d-flex align-items-center">
-                    <strong>Thinking...</strong>
-                    <div class="spinner-border spinner-border-sm ms-2" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
+                    <strong class="me-2">Thinking...</strong>
+                    <div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div>
                 </div>`;
             messageDiv.appendChild(messageContent);
             chatWindow.appendChild(messageDiv);
@@ -148,28 +155,37 @@
             return messageContent;
         };
 
+        const appendInitialWelcomeMessage = () => {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message bot-message';
+            messageDiv.innerHTML = `
+                <div class="message-content shadow-sm">
+                    <p class="mb-1">Hello! I'm InsightBot. 🤖</p>
+                    <p class="mb-0">I can answer questions about our sales data. Try asking something, or click an example on the left!</p>
+                </div>`;
+            chatWindow.appendChild(messageDiv);
+        };
+        
         const renderBotResponse = (container, data) => {
+            // ... (The renderBotResponse, renderChart, and createTable functions from the previous Tier 2 version are perfect here, no changes needed)
+            // For completeness, here they are again:
             container.innerHTML = ''; 
-
             if (data.notice) {
                 const noticeDiv = document.createElement('div');
                 noticeDiv.className = 'alert alert-info py-2 mb-3';
                 noticeDiv.textContent = `💡 ${data.notice}`;
                 container.appendChild(noticeDiv);
             }
-
             const sqlHeader = document.createElement('h6');
             sqlHeader.textContent = 'Generated SQL Query';
             const sqlPre = document.createElement('pre');
             sqlPre.textContent = data.sql_query || "N/A";
             container.appendChild(sqlHeader);
             container.appendChild(sqlPre);
-
             const resultsHeader = document.createElement('h6');
             resultsHeader.className = 'mt-3';
             resultsHeader.textContent = 'Results';
             container.appendChild(resultsHeader);
-            
             if (data.results && data.results.error) {
                 const errorP = document.createElement('p');
                 errorP.className = 'text-danger fw-bold';
@@ -181,7 +197,9 @@
                 }
                 container.appendChild(createTable(data.results));
             } else {
-                container.innerHTML += '<p>No supporting data found for this query.</p>';
+                const noResultsP = document.createElement('p');
+                noResultsP.innerHTML = 'Query ran successfully, but no data matched your criteria. <br><small class="text-muted">This can happen if there were no sales for the requested time period.</small>';
+                container.appendChild(noResultsP);
             }
         };
         
@@ -191,36 +209,17 @@
             const canvas = document.createElement('canvas');
             chartContainer.appendChild(canvas);
             container.appendChild(chartContainer);
-
             const labels = data.map(row => row[suggestion.labels_column]);
             const values = data.map(row => row[suggestion.data_column]);
-
-            new Chart(canvas, {
-                type: suggestion.type,
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: suggestion.data_column.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-                        data: values,
-                        backgroundColor: 'rgba(13, 110, 253, 0.5)',
-                        borderColor: 'rgba(13, 110, 253, 1)',
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    scales: { y: { beginAtZero: true } },
-                    responsive: true,
-                }
-            });
+            new Chart(canvas, { type: suggestion.type, data: { labels: labels, datasets: [{ label: suggestion.data_column.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), data: values, backgroundColor: 'rgba(13, 110, 253, 0.5)', borderColor: 'rgba(13, 110, 253, 1)', borderWidth: 1 }] }, options: { scales: { y: { beginAtZero: true } }, responsive: true }});
         };
 
         const createTable = (data) => {
             const table = document.createElement('table');
-            table.className = 'table table-striped table-bordered';
+            table.className = 'table table-striped table-bordered table-hover';
             const thead = document.createElement('thead');
             const tbody = document.createElement('tbody');
             const headers = Object.keys(data[0]);
-            
             const headerRow = document.createElement('tr');
             headers.forEach(header => {
                 const th = document.createElement('th');
@@ -228,7 +227,6 @@
                 headerRow.appendChild(th);
             });
             thead.appendChild(headerRow);
-
             data.forEach(rowData => {
                 const row = document.createElement('tr');
                 headers.forEach(header => {
@@ -238,12 +236,12 @@
                 });
                 tbody.appendChild(row);
             });
-
             table.appendChild(thead);
             table.appendChild(tbody);
             return table;
         };
 
+        // --- Sidebar and History Logic ---
         const renderSidebarItems = (container, items, title) => {
             container.innerHTML = '';
             if (items.length === 0 && title === 'History') {
@@ -277,16 +275,17 @@
             renderSidebarItems(queryHistoryDiv, history, 'History');
         };
 
+        // --- Event Listeners and Initial Load ---
         document.addEventListener('DOMContentLoaded', () => {
+            appendInitialWelcomeMessage();
             renderSidebarItems(exampleQuestionsDiv, EXAMPLE_QUESTIONS, 'Examples');
             renderHistory();
         });
 
         submitBtn.addEventListener('click', () => handleQuery(queryInput.value));
+        clearBtn.addEventListener('click', clearChat);
         queryInput.addEventListener('keyup', (event) => {
-            if (event.key === 'Enter') {
-                handleQuery(queryInput.value);
-            }
+            if (event.key === 'Enter') handleQuery(queryInput.value);
         });
     </script>
 </body>
