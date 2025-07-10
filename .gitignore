@@ -24,4 +24,7 @@ build/
 *.log
 .DS_Store
 testing*.py
-command.txt 
+command.txt
+
+plan.txt
+og.html
