@@ -1,7 +1,8 @@
 # Insight Bot
 
-Insight Bot is a Python-based web application that lets you ask questions about your sales, products, and customers in plain English. It uses AI to generate safe SQL queries, runs them, and returns results—sometimes with chart suggestions!  
-It’s designed for business users who want instant insights from their data, without writing SQL.
+Why I made this project:
+In warehouses or stores, data lives in SQL databases — but staff may not know SQL or have time to write queries. For example, a store manager might want to ask, 'How many quantities of X were sold?' 
+I built an AI-powered system to solve this: a regex-based filter blocks irrelevant queries, Redis handles caching for performance, and a secure SQL generator (with injection protection) converts natural language into accurate queries along with tabular data visualisation if possible. The result is a safe, intuitive web interface that turns casual questions into database insights — no technical knowledge needed!
 
 ## Features
 
@@ -89,11 +90,3 @@ The bot will generate a SQL query, run it, and display the results (with a chart
 
 - Only SELECT queries are allowed; all others are blocked with a cheeky message.
 - SQL injection is prevented by strict validation and cleaning of all AI-generated SQL.
-
-## License
-
-MIT (or your license here)
-
----
-
-*Feel free to add a screenshot or a project logo above for extra polish!*
