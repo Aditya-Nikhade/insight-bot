@@ -1,6 +1,7 @@
 # Insight Bot
 
-Why I made this project:
+# Why I made this project:
+
 In warehouses or stores, data lives in SQL databases — but staff may not know SQL or have time to write queries. For example, a store manager might want to ask, 'How many quantities of X were sold?' 
 I built an AI-powered system to solve this: a regex-based filter blocks irrelevant queries, Redis handles caching for performance, and a secure SQL generator (with injection protection) converts natural language into accurate queries along with tabular data visualisation if possible. The result is a safe, intuitive web interface that turns casual questions into database insights — no technical knowledge needed!
 
