@@ -420,9 +420,11 @@ def handle_query():
             error_explanation = diagnose_sql_error(user_question, sql_to_execute, str(e))
             return jsonify({"sql_query": sql_to_execute, "results": {"error": error_explanation}, "conversation_id": conversation_id})
 
+#for any errors above.
     except ValueError as e:
         return jsonify({"sql_query": raw_sql, "results": {"error": str(e)}, "conversation_id": conversation_id})
-    
+
+#for any unexpected errors.   
     except Exception as e:
         print(f"Generic execution error: {e}")
         error_message = f"A database error occurred: {e}"
