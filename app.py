@@ -4,6 +4,7 @@ import re
 import json
 import uuid
 import redis
+import sqlparse
 from azure.ai.inference import ChatCompletionsClient
 from azure.ai.inference.models import SystemMessage, UserMessage
 from azure.core.credentials import AzureKeyCredential
@@ -14,9 +15,19 @@ from sqlalchemy.exc import ProgrammingError, OperationalError
 import pandas as pd
 from decimal import Decimal
 
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
+
 # --- SETUP ---
 load_dotenv()
 app = Flask(__name__)
+
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    storage_uri=f"redis://{os.getenv('REDIS_HOST', 'localhost')}:{os.getenv('REDIS_PORT', 6379)}"
+)
 
 # Configure Redis with error handling
 try:
@@ -58,11 +69,45 @@ Table: sales, Columns: id (INT), customer_id (INT), product_id (INT), sale_date 
 
 # --- ROBUST CLASSIFICATION RULES using REGEX ---
 CLASSIFICATION_RULES = [
-    (re.compile(r"^\b(hi|hello|hey|howdy|good morning)\b.*", re.IGNORECASE), "greeting", "Hello! I'm InsightBot. Please ask a question about our sales data."),
-    (re.compile(r"^\b(delete|drop|update|insert|truncate|alter|ddl|dml)\b", re.IGNORECASE), "invalid_operation", "Nice try! 🚨 But I can only perform read-only (SELECT) queries. Better luck next time 😉"),
-    (re.compile(r".*\b(joke|weather|cook|time|fun fact|beyonce)\b.*", re.IGNORECASE), "off_topic", "I can only answer questions related to our sales, products, or customers."),
-    (re.compile(r"^\s*$", re.IGNORECASE), "clarification", "Your query is empty. Please ask a question."),
-    (re.compile(r"^\b(show me|what about|tell me something|list|can you)\b\s*$", re.IGNORECASE), "clarification", "That's a bit vague. Can you be more specific? e.g., 'List the top 5 products by sales'.")
+    # 1. Greetings (only if it's JUST a greeting)
+    (re.compile(r"^\s*\b(hi|hello|hey|howdy|good (morning|afternoon|evening)|greetings)\b[\s.!?]*$", re.IGNORECASE),
+     "greeting",
+     "Hello! I'm InsightBot. Please ask a question about our sales data."),
+    
+    # 2. Farewells/Gratitude/Politeness
+    (re.compile(r"^\s*\b(bye|goodbye|see you|farewell|later|thanks|thank you|thx|kudos|appreciated|appreciate it|grateful)\b.*", re.IGNORECASE),
+     "gratitude",
+     "You're welcome! If you have more questions about sales data, just ask."),
+    
+    # 3. Security: SQL injection/dangerous patterns
+    (re.compile(r"(--|;|/\*|\*/| or 1=1|union select|information_schema)", re.IGNORECASE),
+     "invalid_operation",
+     "Your query contains potentially dangerous SQL patterns. Only safe, read-only queries are allowed."),
+    
+    # 4. Security: Forbidden SQL operations anywhere in the query
+    (re.compile(r"\b(delete|drop|update|insert|truncate|alter|grant|revoke|create|replace|exec|ddl|dml)\b", re.IGNORECASE),
+     "invalid_operation",
+     "For security reasons, I can only perform read-only (SELECT) queries. Commands like UPDATE, DELETE, etc., are not allowed."),
+    
+    # 5. Off-topic (expanded list)
+    (re.compile(r"\b(joke|weather|news|sports|movie|music|recipe|game|beyonce|elon musk|stock|bitcoin|ai|gpt|openai|fun fact|love|sing|story|capital of|who are you)\b", re.IGNORECASE),
+     "off_topic",
+     "I can only answer questions related to our sales, products, or customers."),
+    
+    # 6. Help/capabilities
+    (re.compile(r"^\s*\b(help|what can you do|capabilities|abilities)\b.*", re.IGNORECASE),
+     "help_request",
+     "I can answer questions about sales, products, and customers. Try asking something like: 'What are the top 5 selling products?' or 'Show me the total sales for last month'."),
+    
+    # 7. Empty or whitespace-only input
+    (re.compile(r"^\s*$", re.IGNORECASE),
+     "clarification_empty",
+     "Your query is empty. Please ask a question."),
+    
+    # 8. Vague/incomplete questions
+    (re.compile(r"^\s*\b(show me|what about|tell me|list|can you|info|information|details|more info|continue|next|previous)\b\s*$", re.IGNORECASE),
+     "clarification_vague",
+     "That's a bit vague. Can you be more specific? e.g., 'List the top 5 products by sales'."),
 ]
 
 def get_cache_key(user_question):
@@ -241,12 +286,71 @@ def analyze_and_suggest_chart(results):
         return {"type": chart_type, "labels_column": label_column, "data_column": data_column}
     return None
 
+# --- GLOBAL RATE LIMIT CONFIG ---
+RATE_LIMITS = {
+    'minute': {'key': 'requests:minute', 'limit': 10, 'expire': 60},
+    'day': {'key': 'requests:day', 'limit': 50, 'expire': 86400}
+}
+
 @app.route('/')
 def index():
     return render_template('index.html')
 
+@app.route('/rate_limit_status')
+def rate_limit_status():
+    if not redis_client:
+        return jsonify({
+            'minute': {'count': 0, 'limit': RATE_LIMITS['minute']['limit']},
+            'day': {'count': 0, 'limit': RATE_LIMITS['day']['limit']},
+            'error': 'Redis unavailable'
+        })
+    minute_count = int(redis_client.get(RATE_LIMITS['minute']['key']) or 0)
+    day_count = int(redis_client.get(RATE_LIMITS['day']['key']) or 0)
+    return jsonify({
+        'minute': {'count': minute_count, 'limit': RATE_LIMITS['minute']['limit']},
+        'day': {'count': day_count, 'limit': RATE_LIMITS['day']['limit']}
+    })
+
 @app.route('/query', methods=['POST'])
 def handle_query():
+    # --- GLOBAL RATE LIMITING ---
+    if redis_client:
+        try:
+            # Use a pipeline for an atomic transaction
+            pipe = redis_client.pipeline()
+            
+            # --- Check and Increment Minute Limit ---
+            minute_key = RATE_LIMITS['minute']['key']
+            pipe.incr(minute_key)  # Command 1: Increment
+            pipe.expire(minute_key, RATE_LIMITS['minute']['expire'], nx=True) # Command 2: Set expiry only if it doesn't have one
+            
+            # --- Check and Increment Day Limit ---
+            day_key = RATE_LIMITS['day']['key']
+            pipe.incr(day_key)
+            pipe.expire(day_key, RATE_LIMITS['day']['expire'], nx=True)
+
+            # Execute the transaction and get results
+            results = pipe.execute()
+            minute_count = results[0]
+            day_count = results[2] # Index 2 because each INCR/EXPIRE pair returns two results
+
+            # Enforce limits
+            if minute_count > RATE_LIMITS['minute']['limit']:
+                # Optional: Decrement the counter since we are rejecting the request
+                # redis_client.decr(minute_key) 
+                # redis_client.decr(day_key)
+                return jsonify({"sql_query": "N/A", "results": {"error": f"Global rate limit exceeded ({RATE_LIMITS['minute']['limit']}/min). Please wait and try again."}}), 429
+            
+            if day_count > RATE_LIMITS['day']['limit']:
+                # redis_client.decr(day_key) # Only need to decr the one that failed
+                return jsonify({"sql_query": "N/A", "results": {"error": f"Global daily rate limit exceeded ({RATE_LIMITS['day']['limit']}/day). Please try again tomorrow."}}), 429
+
+        except redis.RedisError as e:
+            # If Redis fails, what is the policy? Fail open or fail closed?
+            # For a public API, "fail closed" (reject request) is safer.
+            print(f"CRITICAL: Redis error during rate limiting: {e}")
+            return jsonify({"sql_query": "N/A", "results": {"error": "Could not contact rate limiting service. Please try again later."}}), 503 # Service Unavailable
+
     data = request.json
     user_question = data.get('question', '').strip()
     conversation_id = data.get('conversation_id')
